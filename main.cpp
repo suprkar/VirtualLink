@@ -3,67 +3,166 @@
 #include <queue>
 #include <limits>
 #include <algorithm>
+#include <set>
+
+using namespace std;
 
 class Graph {
 private:
     int V; // Number of vertices
-    std::vector<std::vector<std::pair<int, int>>> adj; // Adjacency list
+    vector<vector<pair<int, int> > > adj; // Adjacency list
+
+    int find(vector<int>& parent, int i);
+    void union_sets(vector<int>& parent, int x, int y);
+    void tarjanUtil(int u, vector<int>& disc, vector<int>& low, vector<int>& st, vector<int>& stackMember, int& time);
 
 public:
-    Graph(int vertices) : V(vertices) {
-        adj.resize(V);
+    Graph(int vertices);
+    void addEdge(int u, int v, int weight);
+    vector<int> dijkstra(int src);
+    vector<int> bellmanFord(int src);
+    vector<pair<int, pair<int, int> > > kruskal();
+    vector<pair<int, int> > prim();
+    void tarjan();
+    void visualize();
+};
+
+Graph::Graph(int vertices) : V(vertices) {
+    adj.resize(V);
+}
+
+void Graph::addEdge(int u, int v, int weight) {
+    adj[u].push_back(make_pair(v, weight));
+    adj[v].push_back(make_pair(u, weight)); // For undirected graph
+}
+
+vector<int> 
+Graph::dijkstra(int src) 
+{
+    vector<int> dist(V, numeric_limits<int>::max());
+    priority_queue<pair<int, int>, vector<pair<int, int> >, greater<pair<int, int> > > pq;
+    dist[src] = 0;
+    pq.push(make_pair(0, src));
+
+    while (!pq.empty()) {
+        int u = pq.top().second;
+        pq.pop();
+
+        for (vector<pair<int, int> >::iterator it = adj[u].begin(); it != adj[u].end(); ++it) {
+            int v = it->first;
+            int weight = it->second;
+
+            if (dist[v] > dist[u] + weight) {
+                dist[v] = dist[u] + weight;
+                pq.push(make_pair(dist[v], v));
+            }
+        }
     }
+    return dist;
+}
 
-    void addEdge(int u, int v, int weight) {
-        adj[u].push_back({v, weight});
-        adj[v].push_back({u, weight}); // For undirected graph
-    }
+vector<int> 
+Graph::bellmanFord(int src) 
+{
+    vector<int> dist(V, numeric_limits<int>::max());
+    dist[src] = 0;
 
-    // Dijkstra's Algorithm
-    std::vector<int> dijkstra(int src) {
-        std::vector<int> dist(V, std::numeric_limits<int>::max());
-        std::priority_queue<std::pair<int, int>, std::vector<std::pair<int, int>>, std::greater<std::pair<int, int>>> pq;
+    for (int i = 1; i <= V - 1; i++) {
+        for (int u = 0; u < V; u++) {
+            for (vector<pair<int, int> >::iterator it = adj[u].begin(); it != adj[u].end(); ++it) {
+                int v = it->first;
+                int weight = it->second;
 
-        dist[src] = 0;
-        pq.push({0, src});
-
-        while (!pq.empty()) {
-            int u = pq.top().second;
-            pq.pop();
-
-            for (auto& neighbor : adj[u]) {
-                int v = neighbor.first;
-                int weight = neighbor.second;
-
-                if (dist[v] > dist[u] + weight) {
+                if (dist[u] != numeric_limits<int>::max() && dist[u] + weight < dist[v]) {
                     dist[v] = dist[u] + weight;
-                    pq.push({dist[v], v});
                 }
             }
         }
-
-        return dist;
     }
+    return dist;
+}
 
-    // Bellman-Ford Algorithm
-    std::vector<int> bellmanFord(int src) {
-        std::vector<int> dist(V, std::numeric_limits<int>::max());
-        dist[src] = 0;
+vector<pair<int, pair<int, int> > > 
+Graph::kruskal() 
+{
+    vector<pair<int, pair<int, int> > > edges;
+    for (int u = 0; u < V; u++) {
+        for (vector<pair<int, int> >::iterator it = adj[u].begin(); it != adj[u].end(); ++it) {
+            int v = it->first;
+            int weight = it->second;
+            edges.push_back(make_pair(weight, make_pair(u, v)));
+        }
+    }
+    sort(edges.begin(), edges.end());
 
-        for (int i = 1; i <= V - 1; i++) {
-            for (int u = 0; u < V; u++) {
-                for (auto& neighbor : adj[u]) {
-                    int v = neighbor.first;
-                    int weight = neighbor.second;
-                    if (dist[u] != std::numeric_limits<int>::max() && dist[u] + weight < dist[v]) {
-                        dist[v] = dist[u] + weight;
-                    }
-                }
+    vector<int> parent(V);
+    for (int i = 0; i < V; i++) parent[i] = i;
+
+    vector<pair<int, pair<int, int> > > mst;
+    for (vector<pair<int, pair<int, int> > >::iterator it = edges.begin(); it != edges.end(); ++it) {
+        int u = it->second.first;
+        int v = it->second.second;
+        int weight = it->first;
+
+        int set_u = find(parent, u);
+        int set_v = find(parent, v);
+
+        if (set_u != set_v) {
+            mst.push_back(*it);
+            union_sets(parent, set_u, set_v);
+        }
+    }
+    return mst;
+}
+
+vector<pair<int, int> > 
+Graph::prim() 
+{
+    vector<bool> inMST(V, false);
+    vector<int> key(V, numeric_limits<int>::max());
+    vector<int> parent(V, -1);
+    priority_queue<pair<int, int>, vector<pair<int, int> >, greater<pair<int, int> > > pq;
+
+    int src = 0;
+    pq.push(make_pair(0, src));
+    key[src] = 0;
+
+    while (!pq.empty()) {
+        int u = pq.top().second;
+        pq.pop();
+        inMST[u] = true;
+
+        for (vector<pair<int, int> >::iterator it = adj[u].begin(); it != adj[u].end(); ++it) {
+            int v = it->first;
+            int weight = it->second;
+
+            if (!inMST[v] && key[v] > weight) {
+                key[v] = weight;
+                pq.push(make_pair(key[v], v));
+                parent[v] = u;
             }
         }
-
-        return dist;
     }
+
+    vector<pair<int, int> > mst;
+    for (int i = 1; i < V; i++) {
+        mst.push_back(make_pair(parent[i], i));
+    }
+    return mst;
+}
+
+void 
+Graph::tarjan() 
+{
+    vector<int> disc(V, -1), low(V, -1), stackMember(V, 0);
+    vector<int> st;
+    int time = 0;
+
+    for (int i = 0; i < V; i++)
+        if (disc[i] == -1)
+            tarjanUtil(i, disc, low, st, stackMember, time);
+}
+
 
     // Add implementations for Kruskal's, Prim's, and Tarjan's algorithms here
 };
